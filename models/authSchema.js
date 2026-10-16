@@ -1,0 +1,44 @@
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+
+const authSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 25,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    phone: { type: String, required: true, trim: true },
+    password: { type: String, required: true, minlength: 6, select: false },
+    currency: { type: String, default: "BDT" },
+    role: { type: String, enum: ["user"], default: "user" },
+    isVerified: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
+    otp: { type: String, default: null, select: false },
+    otpExpiry: { type: Date, default: null, select: false },
+    resetPasswordToken: { type: String, default: null, select: false },
+    resetPasswordExpiry: { type: Date, default: null, select: false },
+  },
+  { timestamps: true },
+);
+
+authSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+});
+
+authSchema.methods.matchPassword = function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
+};
+
+module.exports = mongoose.model("User", authSchema);
