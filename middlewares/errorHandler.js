@@ -1,10 +1,20 @@
 const errorHandler = (err, req, res, next) => {
   console.error(err);
-  const statusCode = err.statusCode || (err.name === "ValidationError" ? 400 : 500);
-  return res.status(statusCode).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-  });
-};
 
-module.exports = { errorHandler };
+  let statusCode = err.statusCode || 500;
+  let message = err.message;
+
+  if (err.name === "ValidationError") statusCode = 400;
+  if (err.code === 11000) {
+    statusCode = 409;
+    message = "Duplicate value already exists";
+  }
+  if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+    statusCode = 401;
+    message = "Invalid or expired token";
+  }
+
+  if (statusCode === 500) message = "Internal Server Error";
+
+  return res.status(statusCode).json({ success: false, message });
+};

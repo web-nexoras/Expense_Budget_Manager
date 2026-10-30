@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const dbConfig = () => {
   mongoose
-    .connect(process.env.MONGO_URL)
+    .connect(process.env.MONGO_URL || process.env.DB_URL)
     .then(() => console.log("Database connected successfully"))
     .catch((err) => console.log(`Database connection failed: ${err}`));
 };

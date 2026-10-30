@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { emailTemp } = require("./emailTemp");
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
@@ -10,11 +11,19 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const mailSender = async ({ to, subject, html }) => {
+const mailSender = async ({ to, name, otp, purpose, expiresInMinutes }) => {
+  const { subject, text, html } = emailTemp({
+    name,
+    otp,
+    purpose,
+    expiresInMinutes,
+  });
+
   await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to,
     subject,
+    text,
     html,
   });
 };

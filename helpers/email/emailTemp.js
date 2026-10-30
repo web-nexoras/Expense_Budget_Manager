@@ -25,7 +25,7 @@ const copyByPurpose = {
   },
 };
 
-export const emailTemp = ({ name, otp, purpose, expiresInMinutes = 10 }) => {
+const emailTemp = ({ name, otp, purpose, expiresInMinutes = 10 }) => {
   const copy = copyByPurpose[purpose];
   if (!copy) throw new Error("Unsupported email OTP purpose");
   const safeName = escapeHtml(name || "there");
@@ -51,3 +51,5 @@ export const emailTemp = ({ name, otp, purpose, expiresInMinutes = 10 }) => {
 </html>`;
   return { subject, text, html };
 };
+
+module.exports = { emailTemp };

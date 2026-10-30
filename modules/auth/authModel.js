@@ -57,7 +57,7 @@ const authSchema = new mongoose.Schema(
 
     otp: {
       type: String,
-      default: null,
+      default: "",
       select: false,
     },
 
