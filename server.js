@@ -21,6 +21,10 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
+// ---------dns 
+const dns = require("dns");
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 // Health check for deployment/interview demo
 app.get("/health", (_req, res) => {
   res.status(200).json({ success: true, message: "Expense Budget Manager API is healthy" });
