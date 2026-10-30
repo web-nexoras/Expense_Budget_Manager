@@ -38,6 +38,11 @@ const signupService = async ({ name, email, phone, password }) => {
       expiresInMinutes: 5,
     });
   } catch (err) {
+    console.error("OTP email delivery failed:", err.message);
+    // Do not leave an unusable, unverified account behind when email delivery fails.
+    await User.deleteOne({ _id: user._id }).catch((cleanupError) => {
+      console.error("Could not roll back signup after email failure:", cleanupError.message);
+    });
     throw Object.assign(new Error("Failed to send OTP email"), {
       statusCode: 500,
     });
@@ -49,6 +54,45 @@ const signupService = async ({ name, email, phone, password }) => {
   };
 };
 
+const resendOtpService = async ({ email }) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw Object.assign(new Error("No account found for this email"), {
+      statusCode: 404,
+    });
+  }
+
+  if (user.isVerified) {
+    throw Object.assign(new Error("Email is already verified"), {
+      statusCode: 409,
+    });
+  }
+
+  const otp = generateOTP();
+  user.otp = otp;
+  user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+  await user.save();
+
+  try {
+    await mailSender({
+      to: user.email,
+      name: user.name,
+      otp,
+      purpose: "verify-email",
+      expiresInMinutes: 5,
+    });
+  } catch (err) {
+    console.error("OTP resend delivery failed:", err.message);
+    throw Object.assign(new Error("Failed to send OTP email"), {
+      statusCode: 500,
+    });
+  }
+
+  return { message: "A new verification code has been sent.", email: user.email };
+};
+
 module.exports = {
   signupService,
+  resendOtpService,
 };
