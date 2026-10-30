@@ -2,10 +2,19 @@ const mongoose = require("mongoose");
 
 const transactionSchema = new mongoose.Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     type: { type: String, enum: ["income", "expense"], required: true },
     amount: { type: Number, required: true, min: 0 },
-    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
     date: { type: Date, required: true },
     paymentMethod: {
       type: String,
@@ -16,7 +25,7 @@ const transactionSchema = new mongoose.Schema(
     tags: [{ type: String, trim: true }],
     receiptUrl: { type: String, trim: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 transactionSchema.index({ user: 1, date: -1 });

@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
@@ -10,6 +11,7 @@ const authSchema = new mongoose.Schema(
       minlength: 3,
       maxlength: 25,
     },
+
     email: {
       type: String,
       required: true,
@@ -17,26 +19,80 @@ const authSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    phone: { type: String, required: true, trim: true },
-    password: { type: String, required: true, minlength: 6, select: false },
-    currency: { type: String, default: "BDT" },
-    role: { type: String, enum: ["user"], default: "user" },
-    isVerified: { type: Boolean, default: false },
-    isActive: { type: Boolean, default: true },
-    otp: { type: String, default: null, select: false },
-    otpExpiry: { type: Date, default: null, select: false },
-    resetPasswordToken: { type: String, default: null, select: false },
-    resetPasswordExpiry: { type: Date, default: null, select: false },
+
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    password: {
+      type: String,
+      required: true,
+      minlength: 4,
+      maxlength: 20,
+      select: false,
+    },
+
+    currency: {
+      type: String,
+      default: "BDT",
+    },
+
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
+    otp: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    otpExpiry: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    resetPasswordExpiry: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+  }
 );
 
+// Password Hashing Middleware
 authSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
+
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
+// Password Comparison Method
 authSchema.methods.matchPassword = function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
