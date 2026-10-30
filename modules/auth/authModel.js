@@ -9,7 +9,7 @@ const authSchema = new mongoose.Schema(
       required: true,
       trim: true,
       minlength: 3,
-      maxlength: 25,
+      maxlength: 50,
     },
 
     email: {
@@ -29,8 +29,8 @@ const authSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      minlength: 4,
-      maxlength: 20,
+      minlength: 6,
+      maxlength: 72,
       select: false,
     },
 

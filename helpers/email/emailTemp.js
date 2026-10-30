@@ -13,15 +13,15 @@ const escapeHtml = (value = "") =>
 
 const copyByPurpose = {
   "verify-email": {
-    subject: "Verify your TechMe account",
+    subject: "Verify your Expense Badget Manager account",
     title: "Verify your email",
-    intro: "Use this one-time code to finish creating your TechMe account.",
+    intro: "Use this one-time code to finish creating your Expense Badget Manager account.",
   },
   "reset-password": {
-    subject: "Reset your TechMe password",
+    subject: "Reset your Expense Badget Manager password",
     title: "Password reset code",
     intro:
-      "We received a request to reset your TechMe password. Use this code to continue.",
+      "We received a request to reset your Expense Badget Manager password. Use this code to continue.",
   },
 };
 

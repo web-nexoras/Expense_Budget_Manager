@@ -24,13 +24,13 @@ const authUserSchema = {
   // bcrypt reads at most 72 BYTES, so check bytes instead of characters
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
+    .min(6, "Password must be at least 6 characters")
     .refine(
       (v) => Buffer.byteLength(v, "utf8") <= 72,
       "Password is too long (max 72 bytes)"
     ),
 
-  // Must match the length produced by generateOTP() (6 digits)
+  // Must match the length produced by generateOTP() (4 digits)
   otp: z
     .string()
     .trim()
