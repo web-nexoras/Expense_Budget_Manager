@@ -54,8 +54,45 @@ const signupService = async ({ name, email, phone, password }) => {
   };
 };
 
+
+// ---------otp verify
+const verifyOtpService = async ({ email, otp }) => {
+  const user = await User.findOne({ email }).select("+otp +otpExpiry");
+
+  if (!user) {
+    throw Object.assign(new Error("No account found for this email"), {
+      statusCode: 404,
+    });
+  }
+
+  if (user.isVerified) {
+    throw Object.assign(new Error("Email is already verified"), {
+      statusCode: 409,
+    });
+  }
+
+  if (!user.otp || !user.otpExpiry || user.otpExpiry <= new Date()) {
+    throw Object.assign(new Error("OTP has expired. Please request a new one."), {
+      statusCode: 400,
+    });
+  }
+
+  if (user.otp !== otp) {
+    throw Object.assign(new Error("Invalid OTP"), { statusCode: 400 });
+  }
+
+  user.isVerified = true;
+  user.otp = "";
+  user.otpExpiry = null;
+  await user.save();
+
+  return { message: "Email verified successfully.", email: user.email };
+};
+
+
+// ----------resend otp 
 const resendOtpService = async ({ email }) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email }).select("+otp +otpExpiry");
 
   if (!user) {
     throw Object.assign(new Error("No account found for this email"), {
@@ -70,6 +107,8 @@ const resendOtpService = async ({ email }) => {
   }
 
   const otp = generateOTP();
+  const previousOtp = user.otp;
+  const previousOtpExpiry = user.otpExpiry;
   user.otp = otp;
   user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
   await user.save();
@@ -84,6 +123,11 @@ const resendOtpService = async ({ email }) => {
     });
   } catch (err) {
     console.error("OTP resend delivery failed:", err.message);
+    user.otp = previousOtp;
+    user.otpExpiry = previousOtpExpiry;
+    await user.save().catch((restoreError) => {
+      console.error("Could not restore previous OTP:", restoreError.message);
+    });
     throw Object.assign(new Error("Failed to send OTP email"), {
       statusCode: 500,
     });
@@ -94,5 +138,6 @@ const resendOtpService = async ({ email }) => {
 
 module.exports = {
   signupService,
+  verifyOtpService,
   resendOtpService,
 };

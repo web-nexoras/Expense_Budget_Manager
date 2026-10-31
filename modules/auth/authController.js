@@ -14,6 +14,17 @@ const signup = asyncHandler(async (req, res) => {
   });
 });
 
+const verifyOtp = asyncHandler(async (req, res) => {
+  const data = await authService.verifyOtpService(req.body);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: data.message,
+    data: { email: data.email },
+  });
+});
+
 const resendOtp = asyncHandler(async (req, res) => {
   const data = await authService.resendOtpService(req.body);
 
@@ -25,4 +36,4 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { signup, resendOtp };
+module.exports = { signup, verifyOtp, resendOtp };
