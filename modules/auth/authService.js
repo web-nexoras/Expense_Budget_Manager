@@ -1,6 +1,10 @@
 
 const User = require("./authModel");
-const { generateOTP } = require("../../helpers/authUtils/auth_utils");
+const {
+  generateOTP,
+  generateAccessToken,
+  generateRefreshToken,
+} = require("../../helpers/authUtils/auth_utils");
 const { mailSender } = require("../../helpers/email/mailService");
 
 // ----------- Signup Service
@@ -49,7 +53,7 @@ const signupService = async ({ name, email, phone, password }) => {
   }
 
   return {
-    message: "Registration successful. Please verify your email.",
+    message: "Signup successful. Verify your email, then wait for admin approval before signing in.",
     email: user.email,
   };
 };
@@ -136,8 +140,57 @@ const resendOtpService = async ({ email }) => {
   return { message: "A new verification code has been sent.", email: user.email };
 };
 
+const signinService = async ({ email, password }) => {
+  const user = await User.findOne({ email }).select("+password");
+
+  if (!user || !(await user.matchPassword(password))) {
+    throw Object.assign(new Error("Invalid email or password"), { statusCode: 401 });
+  }
+
+  if (!user.isVerified) {
+    throw Object.assign(new Error("Please verify your email before signing in"), { statusCode: 403 });
+  }
+
+  if (!user.isActive) {
+    throw Object.assign(new Error("Your account has been deactivated."), { statusCode: 403 });
+  }
+
+  if (user.role === "user" && !user.isApproved) {
+    throw Object.assign(new Error("Your account is waiting for admin approval."), { statusCode: 403 });
+  }
+
+  return {
+    accessToken: generateAccessToken(user),
+    refreshToken: generateRefreshToken(user),
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      currency: user.currency,
+      role: user.role,
+    },
+  };
+};
+
+const approveUserService = async (userId) => {
+  const user = await User.findOneAndUpdate(
+    { _id: userId, role: "user" },
+    { $set: { isApproved: true } },
+    { new: true, runValidators: true }
+  ).select("name email isApproved");
+
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { statusCode: 404 });
+  }
+
+  return user;
+};
+
 module.exports = {
   signupService,
   verifyOtpService,
   resendOtpService,
+  signinService,
+  approveUserService,
 };

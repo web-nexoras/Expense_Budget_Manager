@@ -2,6 +2,18 @@ const { asyncHandler } = require("../../middlewares/asyncHandler");
 const { sendResponse } = require("../../middlewares/sendResponse");
 const authService = require("./authService");
 
+const setAuthCookies = (res, { accessToken, refreshToken }) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+  };
+
+  res.cookie("accessToken", accessToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie("refreshToken", refreshToken, { ...cookieOptions, maxAge: 15 * 24 * 60 * 60 * 1000 });
+};
+
 // -------- Signup
 const signup = asyncHandler(async (req, res) => {
   const data = await authService.signupService(req.body);
@@ -36,4 +48,26 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { signup, verifyOtp, resendOtp };
+const signin = asyncHandler(async (req, res) => {
+  const data = await authService.signinService(req.body);
+  setAuthCookies(res, data);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Signed in successfully.",
+    data: { user: data.user },
+  });
+});
+
+const approveUser = asyncHandler(async (req, res) => {
+  const user = await authService.approveUserService(req.params.userId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "User approved successfully.",
+    data: { user },
+  });
+});
+
+module.exports = { signup, verifyOtp, resendOtp, signin, approveUser };

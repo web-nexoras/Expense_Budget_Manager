@@ -27,6 +27,8 @@ Interview-ready modular MERN REST API (backend-first).
 - `POST /api/v1/auth/signup` with `name`, `email`, `phone`, and `password` creates an unverified account and emails a 4-digit OTP.
 - `POST /api/v1/auth/verify-otp` with `email` and `otp` verifies the account. OTPs expire after 5 minutes.
 - `POST /api/v1/auth/resend-otp` with `email` sends a new OTP for an unverified account.
+- Regular users must be approved by an admin after email verification before they can sign in.
+- `PATCH /api/v1/auth/users/:userId/approve` approves a user account; requires an authenticated admin session.
 
 ## Main modules
 

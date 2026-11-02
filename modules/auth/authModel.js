@@ -55,6 +55,13 @@ const authSchema = new mongoose.Schema(
       default: true,
     },
 
+    isApproved: {
+      type: Boolean,
+      default: function () {
+        return this.role === "admin";
+      },
+    },
+
     otp: {
       type: String,
       default: "",
