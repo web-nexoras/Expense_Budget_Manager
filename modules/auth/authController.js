@@ -48,6 +48,16 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
+const forgotPassword = asyncHandler(async (req, res) => {
+  const data = await authService.forgotPasswordService(req.body);
+  sendResponse(res, { statusCode: 200, success: true, message: data.message });
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const data = await authService.resetPasswordService(req.body);
+  sendResponse(res, { statusCode: 200, success: true, message: data.message });
+});
+
 const signin = asyncHandler(async (req, res) => {
   const data = await authService.signinService(req.body);
   setAuthCookies(res, data);
@@ -70,4 +80,4 @@ const approveUser = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { signup, verifyOtp, resendOtp, signin, approveUser };
+module.exports = { signup, verifyOtp, resendOtp, forgotPassword, resetPassword, signin, approveUser };

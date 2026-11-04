@@ -140,6 +140,58 @@ const resendOtpService = async ({ email }) => {
   return { message: "A new verification code has been sent.", email: user.email };
 };
 
+const forgotPasswordService = async ({ email }) => {
+  const user = await User.findOne({ email }).select("+resetPasswordToken +resetPasswordExpiry");
+
+  // Keep the response identical for known and unknown addresses to prevent account discovery.
+  if (!user || !user.isVerified || !user.isActive) {
+    return { message: "If an eligible account exists, a password reset code has been sent." };
+  }
+
+  const otp = generateOTP();
+  const previousToken = user.resetPasswordToken;
+  const previousExpiry = user.resetPasswordExpiry;
+  user.resetPasswordToken = otp;
+  user.resetPasswordExpiry = new Date(Date.now() + 5 * 60 * 1000);
+  await user.save();
+
+  try {
+    await mailSender({
+      to: user.email,
+      name: user.name,
+      otp,
+      purpose: "reset-password",
+      expiresInMinutes: 5,
+    });
+  } catch (err) {
+    console.error("Password reset email delivery failed:", err.message);
+    user.resetPasswordToken = previousToken;
+    user.resetPasswordExpiry = previousExpiry;
+    await user.save().catch((restoreError) => {
+      console.error("Could not restore previous password reset code:", restoreError.message);
+    });
+    throw Object.assign(new Error("Failed to send password reset email"), { statusCode: 500 });
+  }
+
+  return { message: "If an eligible account exists, a password reset code has been sent." };
+};
+
+const resetPasswordService = async ({ email, otp, newPassword }) => {
+  const user = await User.findOne({ email }).select("+password +resetPasswordToken +resetPasswordExpiry");
+  if (!user || !user.resetPasswordToken || !user.resetPasswordExpiry || user.resetPasswordExpiry <= new Date()) {
+    throw Object.assign(new Error("Invalid or expired password reset code"), { statusCode: 400 });
+  }
+  if (user.resetPasswordToken !== otp) {
+    throw Object.assign(new Error("Invalid or expired password reset code"), { statusCode: 400 });
+  }
+
+  user.password = newPassword;
+  user.resetPasswordToken = null;
+  user.resetPasswordExpiry = null;
+  await user.save();
+  return { message: "Password has been reset successfully. Please sign in with your new password." };
+};
+
 const signinService = async ({ email, password }) => {
   const user = await User.findOne({ email }).select("+password");
 
@@ -191,6 +243,8 @@ module.exports = {
   signupService,
   verifyOtpService,
   resendOtpService,
+  forgotPasswordService,
+  resetPasswordService,
   signinService,
   approveUserService,
 };
