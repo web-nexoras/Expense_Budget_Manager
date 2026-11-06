@@ -98,20 +98,6 @@ const resetPasswordSchema = z.object({
     .strict(),
 });
 
-// 7. Change Password
-const changePasswordSchema = z.object({
-  body: z
-    .object({
-      currentPassword: z.string().min(1, "Current password is required"),
-      newPassword: authUserSchema.password,
-    })
-    .strict()
-    .refine((d) => d.currentPassword !== d.newPassword, {
-      message: "New password must be different from current password",
-      path: ["newPassword"],
-    }),
-});
-
 module.exports = {
   authUserSchema,
   signupSchema,
@@ -120,5 +106,4 @@ module.exports = {
   signinSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
-  changePasswordSchema,
 };
