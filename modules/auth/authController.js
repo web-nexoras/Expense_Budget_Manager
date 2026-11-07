@@ -10,7 +10,7 @@ const setAuthCookies = (res, { accessToken, refreshToken }) => {
     sameSite: isProduction ? "none" : "lax",
   };
 
-  res.cookie("accessToken", accessToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie("accessToken", accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 });
   res.cookie("refreshToken", refreshToken, { ...cookieOptions, maxAge: 15 * 24 * 60 * 60 * 1000 });
 };
 
@@ -70,6 +70,27 @@ const signin = asyncHandler(async (req, res) => {
   });
 });
 
+const refreshAuth = asyncHandler(async (req, res) => {
+  const data = await authService.refreshAuthService(req.cookies?.refreshToken);
+  setAuthCookies(res, data);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Session refreshed successfully.",
+  });
+});
+
+const logout = asyncHandler(async (req, res) => {
+  await authService.logoutService(req.cookies?.refreshToken);
+  res.clearCookie("accessToken");
+  res.clearCookie("refreshToken");
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Signed out successfully.",
+  });
+});
+
 const approveUser = asyncHandler(async (req, res) => {
   const user = await authService.approveUserService(req.params.userId);
   sendResponse(res, {
@@ -80,4 +101,4 @@ const approveUser = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { signup, verifyOtp, resendOtp, forgotPassword, resetPassword, signin, approveUser };
+module.exports = { signup, verifyOtp, resendOtp, forgotPassword, resetPassword, signin, refreshAuth, logout, approveUser };

@@ -1,5 +1,5 @@
 const express = require("express");
-const { signup, verifyOtp, resendOtp, signin, approveUser, forgotPassword, resetPassword } = require("./authController");
+const { signup, verifyOtp, resendOtp, signin, refreshAuth, logout, approveUser, forgotPassword, resetPassword } = require("./authController");
 const { signupSchema, verifyOtpSchema, resendOtpSchema, signinSchema, forgotPasswordSchema, resetPasswordSchema } = require("./authValidations");
 const validateRequest = require("../../middlewares/validationRequest");
 const { authRateLimiter, otpRateLimiter } = require("../../middlewares/rateLimiter");
@@ -10,6 +10,8 @@ const router = express.Router();
 
 router.post("/signup", authRateLimiter, validateRequest(signupSchema), signup);
 router.post("/signin", authRateLimiter, validateRequest(signinSchema), signin);
+router.post("/refresh", authRateLimiter, refreshAuth);
+router.post("/logout", logout);
 router.patch("/users/:userId/approve", authMiddleware, requireAdmin, approveUser);
 router.post("/verify-otp", otpRateLimiter, validateRequest(verifyOtpSchema), verifyOtp);
 router.post("/resend-otp", otpRateLimiter, validateRequest(resendOtpSchema), resendOtp);

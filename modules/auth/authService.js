@@ -1,17 +1,24 @@
 
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 const User = require("./authModel");
+
 const {
   generateOTP,
   generateAccessToken,
   generateRefreshToken,
 } = require("../../helpers/authUtils/auth_utils");
+
 const { mailSender } = require("../../helpers/email/mailService");
-const { redisSet, redisDelete } = require("../../helpers/redisUtils/redis.utils");
+
+const {
+  redisSet,
+  redisDelete,
+  redisGet,
+} = require("../../helpers/redisUtils/redis.utils");
 
 // ----------- Signup Service
 const signupService = async ({ name, email, phone, password }) => {
-
-  // Check Existing User
   const existingUser = await User.findOne({ email });
 
   if (existingUser) {
@@ -20,10 +27,8 @@ const signupService = async ({ name, email, phone, password }) => {
     });
   }
 
-  // Generate OTP
   const otp = generateOTP();
 
-  // Create New User
   const user = await User.create({
     name,
     email,
@@ -31,10 +36,15 @@ const signupService = async ({ name, email, phone, password }) => {
     password,
   });
 
-  // Store OTP in Redis (5 Minutes)
-  await redisSet(`otp:${email}`, otp, 300); 
+  try {
+    await redisSet(`otp:${email}`, otp, 300);
+  } catch (err) {
+    await User.deleteOne({ _id: user._id }).catch(console.error);
+    throw Object.assign(new Error("Signup verification is temporarily unavailable"), {
+      statusCode: 503,
+    });
+  }
 
-  // Send OTP Email
   try {
     await mailSender({
       to: email,
@@ -44,28 +54,22 @@ const signupService = async ({ name, email, phone, password }) => {
       expiresInMinutes: 5,
     });
   } catch (err) {
-    console.error("OTP email delivery failed:", err.message);
-
-    // Delete OTP from Redis
+    console.error("Signup OTP email failed:", err.message);
     await redisDelete(`otp:${email}`).catch(console.error);
-
-    // Rollback User Creation
     await User.deleteOne({ _id: user._id }).catch(console.error);
-
-    throw Object.assign(new Error("Failed to send OTP email"), {
-      statusCode: 500,
-    });
+    throw Object.assign(new Error("Failed to send OTP email"), { statusCode: 502 });
   }
 
   return {
-    message: "Signup successful. Verify your email, then wait for admin approval before signing in.",
+    message:
+      "Signup successful. Verify your email, then wait for admin approval before signing in.",
     email: user.email,
   };
 };
 
-// ---------otp verify
+// ----------- OTP Verify
 const verifyOtpService = async ({ email, otp }) => {
-  const user = await User.findOne({ email }).select("+otp +otpExpiry");
+  const user = await User.findOne({ email });
 
   if (!user) {
     throw Object.assign(new Error("No account found for this email"), {
@@ -79,28 +83,37 @@ const verifyOtpService = async ({ email, otp }) => {
     });
   }
 
-  if (!user.otp || !user.otpExpiry || user.otpExpiry <= new Date()) {
-    throw Object.assign(new Error("OTP has expired. Please request a new one."), {
+  // Get OTP From Redis
+  const storedOtp = await redisGet(`otp:${email}`);
+
+  if (!storedOtp) {
+    throw Object.assign(
+      new Error("OTP has expired. Please request a new one."),
+      { statusCode: 400 }
+    );
+  }
+
+  if (storedOtp !== otp) {
+    throw Object.assign(new Error("Invalid OTP"), {
       statusCode: 400,
     });
   }
 
-  if (user.otp !== otp) {
-    throw Object.assign(new Error("Invalid OTP"), { statusCode: 400 });
-  }
-
   user.isVerified = true;
-  user.otp = "";
-  user.otpExpiry = null;
   await user.save();
 
-  return { message: "Email verified successfully.", email: user.email };
+  // Delete Verified OTP
+  await redisDelete(`otp:${email}`);
+
+  return {
+    message: "Email verified successfully.",
+    email: user.email,
+  };
 };
 
-
-// ----------resend otp 
+// ----------- Resend OTP
 const resendOtpService = async ({ email }) => {
-  const user = await User.findOne({ email }).select("+otp +otpExpiry");
+  const user = await User.findOne({ email });
 
   if (!user) {
     throw Object.assign(new Error("No account found for this email"), {
@@ -115,13 +128,11 @@ const resendOtpService = async ({ email }) => {
   }
 
   const otp = generateOTP();
-  const previousOtp = user.otp;
-  const previousOtpExpiry = user.otpExpiry;
-  user.otp = otp;
-  user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-  await user.save();
 
   try {
+    // Store New OTP (5 Minutes)
+    await redisSet(`otp:${email}`, otp, 300);
+
     await mailSender({
       to: user.email,
       name: user.name,
@@ -131,35 +142,37 @@ const resendOtpService = async ({ email }) => {
     });
   } catch (err) {
     console.error("OTP resend delivery failed:", err.message);
-    user.otp = previousOtp;
-    user.otpExpiry = previousOtpExpiry;
-    await user.save().catch((restoreError) => {
-      console.error("Could not restore previous OTP:", restoreError.message);
-    });
+
+    await redisDelete(`otp:${email}`).catch(console.error);
+
     throw Object.assign(new Error("Failed to send OTP email"), {
       statusCode: 500,
     });
   }
 
-  return { message: "A new verification code has been sent.", email: user.email };
+  return {
+    message: "A new verification code has been sent.",
+    email: user.email,
+  };
 };
 
+// ----------- Forgot Password
 const forgotPasswordService = async ({ email }) => {
-  const user = await User.findOne({ email }).select("+resetPasswordToken +resetPasswordExpiry");
+  const user = await User.findOne({ email });
 
-  // Keep the response identical for known and unknown addresses to prevent account discovery.
   if (!user || !user.isVerified || !user.isActive) {
-    return { message: "If an eligible account exists, a password reset code has been sent." };
+    return {
+      message:
+        "If an eligible account exists, a password reset code has been sent.",
+    };
   }
 
   const otp = generateOTP();
-  const previousToken = user.resetPasswordToken;
-  const previousExpiry = user.resetPasswordExpiry;
-  user.resetPasswordToken = otp;
-  user.resetPasswordExpiry = new Date(Date.now() + 5 * 60 * 1000);
-  await user.save();
 
   try {
+    // Store Reset OTP in Redis (5 Minutes)
+    await redisSet(`resetOtp:${email}`, otp, 300);
+
     await mailSender({
       to: user.email,
       name: user.name,
@@ -169,55 +182,92 @@ const forgotPasswordService = async ({ email }) => {
     });
   } catch (err) {
     console.error("Password reset email delivery failed:", err.message);
-    user.resetPasswordToken = previousToken;
-    user.resetPasswordExpiry = previousExpiry;
-    await user.save().catch((restoreError) => {
-      console.error("Could not restore previous password reset code:", restoreError.message);
+
+    await redisDelete(`resetOtp:${email}`).catch(console.error);
+
+    throw Object.assign(new Error("Failed to send password reset email"), {
+      statusCode: 500,
     });
-    throw Object.assign(new Error("Failed to send password reset email"), { statusCode: 500 });
   }
 
-  return { message: "If an eligible account exists, a password reset code has been sent." };
+  return {
+    message:
+      "If an eligible account exists, a password reset code has been sent.",
+  };
 };
 
+// ----------- Reset Password
 const resetPasswordService = async ({ email, otp, newPassword }) => {
-  const user = await User.findOne({ email }).select("+password +resetPasswordToken +resetPasswordExpiry");
-  if (!user || !user.resetPasswordToken || !user.resetPasswordExpiry || user.resetPasswordExpiry <= new Date()) {
-    throw Object.assign(new Error("Invalid or expired password reset code"), { statusCode: 400 });
+  const user = await User.findOne({ email });
+
+  if (!user || !user.isVerified || !user.isActive) {
+    throw Object.assign(
+      new Error("Invalid or expired password reset code"),
+      { statusCode: 400 }
+    );
   }
-  if (user.resetPasswordToken !== otp) {
-    throw Object.assign(new Error("Invalid or expired password reset code"), { statusCode: 400 });
+
+  // Get Reset OTP From Redis
+  const storedOtp = await redisGet(`resetOtp:${email}`);
+
+  if (!storedOtp || storedOtp !== otp) {
+    throw Object.assign(
+      new Error("Invalid or expired password reset code"),
+      { statusCode: 400 }
+    );
   }
 
   user.password = newPassword;
-  user.resetPasswordToken = null;
-  user.resetPasswordExpiry = null;
   await user.save();
-  return { message: "Password has been reset successfully. Please sign in with your new password." };
+
+  // Delete Used Reset OTP
+  await redisDelete(`resetOtp:${email}`);
+  await redisDelete(`refreshToken:${user._id}`);
+
+  return {
+    message:
+      "Password has been reset successfully. Please sign in with your new password.",
+  };
 };
 
+// ----------- Signin Service
 const signinService = async ({ email, password }) => {
   const user = await User.findOne({ email }).select("+password");
 
   if (!user || !(await user.matchPassword(password))) {
-    throw Object.assign(new Error("Invalid email or password"), { statusCode: 401 });
+    throw Object.assign(new Error("Invalid email or password"), {
+      statusCode: 401,
+    });
   }
 
   if (!user.isVerified) {
-    throw Object.assign(new Error("Please verify your email before signing in"), { statusCode: 403 });
+    throw Object.assign(
+      new Error("Please verify your email before signing in"),
+      { statusCode: 403 }
+    );
   }
 
   if (!user.isActive) {
-    throw Object.assign(new Error("Your account has been deactivated."), { statusCode: 403 });
+    throw Object.assign(new Error("Your account has been deactivated."), {
+      statusCode: 403,
+    });
   }
 
   if (user.role === "user" && !user.isApproved) {
-    throw Object.assign(new Error("Your account is waiting for admin approval."), { statusCode: 403 });
+    throw Object.assign(
+      new Error("Your account is waiting for admin approval."),
+      { statusCode: 403 }
+    );
   }
 
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  await saveRefreshToken(user._id, refreshToken);
+
   return {
-    accessToken: generateAccessToken(user),
-    refreshToken: generateRefreshToken(user),
+    accessToken,
+    refreshToken,
     user: {
       id: user._id,
       name: user.name,
@@ -229,6 +279,58 @@ const signinService = async ({ email, password }) => {
   };
 };
 
+const saveRefreshToken = async (userId, refreshToken) => {
+  const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+  await redisSet(`refreshToken:${userId}`, tokenHash, 15 * 24 * 60 * 60);
+};
+
+const refreshAuthService = async (refreshToken) => {
+  if (!refreshToken) {
+    throw Object.assign(new Error("Refresh token is missing"), { statusCode: 401 });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, process.env.JWT_SEC);
+  } catch (err) {
+    throw Object.assign(new Error("Invalid or expired refresh token"), { statusCode: 401 });
+  }
+
+  const user = await User.findById(decoded._id);
+  const savedTokenHash = user && await redisGet(`refreshToken:${user._id}`);
+  const receivedTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+  const tokenMatches =
+    typeof savedTokenHash === "string" &&
+    savedTokenHash.length === receivedTokenHash.length &&
+    crypto.timingSafeEqual(Buffer.from(savedTokenHash), Buffer.from(receivedTokenHash));
+
+  if (!user || !user.isActive || !user.isVerified || !tokenMatches) {
+    throw Object.assign(new Error("Invalid or expired refresh token"), { statusCode: 401 });
+  }
+  if (user.role === "user" && !user.isApproved) {
+    throw Object.assign(new Error("Your account is waiting for admin approval."), { statusCode: 403 });
+  }
+
+  const accessToken = generateAccessToken(user);
+  const nextRefreshToken = generateRefreshToken(user);
+  await saveRefreshToken(user._id, nextRefreshToken);
+
+  return { accessToken, refreshToken: nextRefreshToken };
+};
+
+const logoutService = async (refreshToken) => {
+  if (!refreshToken) return;
+
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SEC);
+    await redisDelete(`refreshToken:${decoded._id}`);
+  } catch (err) {
+    // An invalid token has no active Redis session to revoke.
+  }
+};
+
+// ----------- Approve User
 const approveUserService = async (userId) => {
   const user = await User.findOneAndUpdate(
     { _id: userId, role: "user" },
@@ -237,7 +339,9 @@ const approveUserService = async (userId) => {
   ).select("name email isApproved");
 
   if (!user) {
-    throw Object.assign(new Error("User not found"), { statusCode: 404 });
+    throw Object.assign(new Error("User not found"), {
+      statusCode: 404,
+    });
   }
 
   return user;
@@ -250,5 +354,7 @@ module.exports = {
   forgotPasswordService,
   resetPasswordService,
   signinService,
+  refreshAuthService,
+  logoutService,
   approveUserService,
 };

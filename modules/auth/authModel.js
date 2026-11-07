@@ -61,24 +61,12 @@ const authSchema = new mongoose.Schema(
         return this.role === "admin";
       },
     },
-    resetPasswordToken: {
-      type: String,
-      default: null,
-      select: false,
-    },
-
-    resetPasswordExpiry: {
-      type: Date,
-      default: null,
-      select: false,
-    },
   },
   {
     timestamps: true,
   }
 );
 
-// Password Hashing Middleware
 authSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
@@ -86,7 +74,6 @@ authSchema.pre("save", async function () {
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Password Comparison Method
 authSchema.methods.matchPassword = function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
