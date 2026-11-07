@@ -7,6 +7,7 @@ const helmet = require("helmet");
 const router = require("./routes");
 const { errorHandler } = require("./middlewares/errorHandler");
 const dbConfig = require("./configs/dbConfig");
+const { connectRedis } = require("./configs/redisCon");
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -34,6 +35,7 @@ app.use(router);
 app.use(errorHandler);
 
 dbConfig();
+connectRedis();
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
