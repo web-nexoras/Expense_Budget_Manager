@@ -61,19 +61,6 @@ const authSchema = new mongoose.Schema(
         return this.role === "admin";
       },
     },
-
-    otp: {
-      type: String,
-      default: "",
-      select: false,
-    },
-
-    otpExpiry: {
-      type: Date,
-      default: null,
-      select: false,
-    },
-
     resetPasswordToken: {
       type: String,
       default: null,

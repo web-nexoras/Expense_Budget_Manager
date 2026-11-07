@@ -6,10 +6,11 @@ const {
   generateRefreshToken,
 } = require("../../helpers/authUtils/auth_utils");
 const { mailSender } = require("../../helpers/email/mailService");
+const { redisSet, redisDelete } = require("../../helpers/redisUtils/redis.utils");
 
 // ----------- Signup Service
 const signupService = async ({ name, email, phone, password }) => {
- 
+
   // Check Existing User
   const existingUser = await User.findOne({ email });
 
@@ -28,9 +29,10 @@ const signupService = async ({ name, email, phone, password }) => {
     email,
     phone,
     password,
-    otp,
-    otpExpiry: new Date(Date.now() + 5 * 60 * 1000),
   });
+
+  // Store OTP in Redis (5 Minutes)
+  await redisSet(`otp:${email}`, otp, 300); 
 
   // Send OTP Email
   try {
@@ -43,10 +45,13 @@ const signupService = async ({ name, email, phone, password }) => {
     });
   } catch (err) {
     console.error("OTP email delivery failed:", err.message);
-    // Do not leave an unusable, unverified account behind when email delivery fails.
-    await User.deleteOne({ _id: user._id }).catch((cleanupError) => {
-      console.error("Could not roll back signup after email failure:", cleanupError.message);
-    });
+
+    // Delete OTP from Redis
+    await redisDelete(`otp:${email}`).catch(console.error);
+
+    // Rollback User Creation
+    await User.deleteOne({ _id: user._id }).catch(console.error);
+
     throw Object.assign(new Error("Failed to send OTP email"), {
       statusCode: 500,
     });
@@ -57,7 +62,6 @@ const signupService = async ({ name, email, phone, password }) => {
     email: user.email,
   };
 };
-
 
 // ---------otp verify
 const verifyOtpService = async ({ email, otp }) => {
